@@ -1,5 +1,5 @@
 """Deploy committed runtime files through the dedicated restricted SSH key."""
-import argparse,hashlib,io,json,os,re,subprocess,sys,tarfile,tempfile,urllib.request
+import argparse,io,os,re,subprocess,sys,tarfile,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
@@ -26,11 +26,5 @@ with tempfile.TemporaryFile() as bundle:
             content=subprocess.check_output(['git','show',commit+':'+name],cwd=ROOT)
             info=tarfile.TarInfo(name);info.size=len(content);info.mode=0o644;archive.addfile(info,io.BytesIO(content))
     bundle.seek(0);subprocess.run(ssh+['deploy '+commit],stdin=bundle,check=True)
-for url in ['https://zhikejulia.com/api/abs/health','https://zhikejulia.com/api/abs/status']:
-    with urllib.request.urlopen(url,timeout=20) as r:print(json.dumps({'url':url,'result':json.load(r)},ensure_ascii=False))
-for name in required:
-    if not name.startswith('app/static/abs/'):continue
-    expected=subprocess.check_output(['git','show',commit+':'+name],cwd=ROOT)
-    with urllib.request.urlopen('https://zhikejulia.com/'+name.removeprefix('app/static/abs/')+'?verify='+commit,timeout=20) as r:
-        if hashlib.sha256(r.read()).digest()!=hashlib.sha256(expected).digest():raise SystemExit('Live static file differs from commit: '+name)
+subprocess.run(['node','scripts/verify-deployment.cjs',commit],cwd=ROOT,check=True)
 print('Deployed commit '+commit+' to https://zhikejulia.com/')
