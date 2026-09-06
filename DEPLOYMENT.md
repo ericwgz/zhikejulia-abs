@@ -4,7 +4,7 @@
 
 | 项目 | 值 |
 |---|---|
-| GitHub | `https://github.com/ericwgz/zhikejulia-abs`，私有仓库 |
+| GitHub | `https://github.com/ericwgz/zhikejulia-abs`，公开仓库 |
 | 网站 | `https://zhikejulia.com/`，`https://www.zhikejulia.com/` |
 | 兼容入口 | `https://badrams.com/abs/` |
 | 云 API | `https://api.agidock.cloud` |
@@ -20,7 +20,8 @@
 
 ## 三类权限
 
-1. **GitHub 协作者权限**：拉取私有代码、推送改动、创建/合并 PR。
+1. **GitHub 协作者权限**：接受写权限邀请后，可向原仓库推送改动和合并 PR。
+   公开源码可直接查看和克隆；公开可见性本身不授予他人直接推送权限。
 2. **部署 SSH 私钥 `abs_deploy`**：仅允许 `status` 和 `deploy <Git SHA>`，由
    服务器固定入口验证并发布 ABS。SSH 本身不提供通用 shell、PTY 或端口转发。
    获准发布的应用代码会以 `badrams` 服务用户运行，因此部署权限应交给可信同事。
