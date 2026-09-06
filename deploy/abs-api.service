@@ -1,0 +1,24 @@
+[Unit]
+Description=ABS Lens report-grounded model API
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/badrams-data/abs-api
+
+[Service]
+Type=simple
+User=badrams
+Group=badrams
+WorkingDirectory=/opt/badrams/abs-api/current
+EnvironmentFile=/etc/badrams/abs-api.env
+ExecStart=/usr/bin/python3 /opt/badrams/abs-api/current/abs_api.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/badrams-data/abs-api
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
