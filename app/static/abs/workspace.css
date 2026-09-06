@@ -11,3 +11,6 @@
 .report-section p,.report-summary,.message,.score-intro>p,#dialog-body{font-size:16px}
 .context-checks input{width:16px;height:16px;flex-shrink:0}.context-checks label{line-height:1.6}.chat-header p,.context-meta,.chat-disclaimer,.report-section .source{color:#7789a2}.chat-input-wrap textarea::placeholder{color:#8192aa}.report-section p,.report-summary,.message-bubble{color:#405b7e}.chat-panel{min-width:0}.region-track{overflow:hidden}
 @media(max-width:620px){.topbar nav{gap:10px}.brand strong{font-size:17px}.topbar nav a{font-size:14px}.context-checks{gap:10px}.dimension h3{flex-wrap:wrap}.region-row{grid-template-columns:56px 1fr 74px 30px}}
+
+/* Small Ant-Group brand mark in the bottom-right corner; never intercepts clicks. */
+.brand-mark{position:fixed;right:14px;bottom:10px;z-index:15;font-size:11px;font-weight:500;letter-spacing:.6px;line-height:1.4;color:#b0bac7;white-space:nowrap;pointer-events:none;user-select:none}
