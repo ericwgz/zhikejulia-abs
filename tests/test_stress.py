@@ -242,6 +242,10 @@ class StressApiTests(unittest.TestCase):
         excerpt='本合约明确规定：DPD30逾期率超过3%为关注，超过5%为严重预警。'
         api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'DPD30逾期率超过3%为关注，超过5%为严重预警。'}],'notes':[]},ensure_ascii=False)
         result=stress.parse_contract(api,'test','clause.txt',excerpt.encode());self.assertTrue(result['requires_confirmation']);self.assertEqual(result['thresholds']['dpd']['red'],5)
+        api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote_refs':['C1']}],'notes':[]})
+        self.assertEqual(stress.parse_contract(api,'test','clause.txt',excerpt.encode())['thresholds']['dpd']['quote'],excerpt)
+        api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote_refs':['C999']}],'notes':[]})
+        with self.assertRaises(ValueError):stress.parse_contract(api,'test','clause.txt',excerpt.encode())
         api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'这是伪造的合同条款'}],'notes':[]},ensure_ascii=False)
         with self.assertRaises(ValueError):stress.parse_contract(api,'test','clause.txt',excerpt.encode())
     def test_csv_xlsx_download_upload_and_partial_data(self):

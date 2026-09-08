@@ -7,7 +7,7 @@ const num=(v,n=2)=>v===null||v===undefined?'—':Number(v).toLocaleString('zh-CN
 const money=v=>num(v/10000)+' 万元', signal=s=>`<span class="signal state-${s}"><i></i>${labels[s]}</span>`;
 const st={session:null,team:null,schema:null,datasets:[],history:[],dataset:'',product:'',params:{},overrides:{},contract:null,result:null,tab:'metrics',scenario:'base',confirmed:false,busy:false,error:'',generation:0,operation:0,poll:null};
 const active=()=>location.hash.replace(/^#\/?/,'').split('/')[0]==='stress';
-async function api(path,data){const r=await fetch(endpoint+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',...(st.session?.csrf?{'X-CSRF-Token':st.session.csrf}:{})},...(data===undefined?{}:{body:JSON.stringify(data)})});const b=await r.json();if(!r.ok)throw Error(b.message||'请求失败，请稍后重试。');return b;}
+async function api(path,data){const r=await fetch(endpoint+path,{method:data===undefined?'GET':'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',...(st.session?.csrf?{'X-CSRF-Token':st.session.csrf}:{})},...(data===undefined?{}:{body:JSON.stringify(data)})});let b;try{b=await r.json();}catch{throw Error(path==='contract'?'合约分析暂未完成，请重试或手工设置阈值。':'服务暂时没有返回有效结果，请稍后重试。');}if(!r.ok)throw Error(b.message||'请求失败，请稍后重试。');return b;}
 function reset(){clearTimeout(st.poll);st.operation++;st.busy=false;Object.assign(st,{datasets:[],history:[],dataset:'',product:'',params:{},overrides:{},contract:null,result:null,confirmed:false,error:''});}
 function current(){return st.datasets.find(d=>d.id===st.dataset);}
 function choose(id){st.dataset=id;st.product=current()?.products[0]?.id||'';st.result=null;st.overrides={};st.contract=null;st.confirmed=false;clearTimeout(st.poll);}

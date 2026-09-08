@@ -47,5 +47,6 @@ async function setup(authenticated=true){
  b.w.location.hash='/dashboard';await tick();b.w.location.hash='/stress';await tick();await b.render();b.resolve({dataset:ds});await tick();await tick();assert(!b.$('#sx-demo').disabled,'late request must release busy after navigation');b.dom.window.close();
 
  const c=await setup();const file={name:'bad.csv',size:3,arrayBuffer:async()=>new Uint8Array([1,2,3]).buffer};Object.defineProperty(c.$('#sx-file'),'files',{value:[file]});c.$('#sx-file').dispatchEvent(new c.w.Event('change'));await tick();await tick();assert.match(c.$('.work-error').textContent,/上传字段不正确/);assert(!c.$('#sx-demo').disabled);c.dom.window.close();
+ const d=await setup();d.w.fetch=async()=>({ok:false,json:async()=>{throw Error('upstream HTML page');}});Object.defineProperty(d.$('#sx-file'),'files',{value:[file]});d.$('#sx-file').dispatchEvent(new d.w.Event('change'));await tick();await tick();assert.match(d.$('.work-error').textContent,/服务暂时没有返回有效结果/);assert(!d.$('#sx-demo').disabled);d.dom.window.close();
  console.log('PASS: stress authentication, confirmation, CSRF, 24 metrics, immutable product selection, model escaping/evidence/export, team isolation, stale-request busy recovery, upload error state.');
 })().catch(e=>{console.error(e);process.exitCode=1});
