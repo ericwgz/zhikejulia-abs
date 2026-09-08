@@ -114,7 +114,9 @@ def facts_for_model(result):
     def cash(value):return n(value/10000)+'万元'
     for m in result['assessment']['metrics']:
         rule=m['threshold'];op={'gt':'>','ge':'≥','lt':'<'}[rule['op']]
-        facts[m['ref']]=f"{m['name']}：本期 {n(m['value'])}{m['unit']}；上期 {n(m['previous'])}{m['unit']}。用于判灯的{bases[rule['basis']]}为 {n(m['comparison'])}；黄线 {op}{n(rule['yellow'])}，红线 {op}{n(rule['red'])}（缺失代表该级未设置）。已计算状态：{labels[m['status']]}。阈值来源：{rule['source']}。{m['note']}"
+        yellow_op='≤' if m['id']=='reserve' and rule['yellow']==0 else op
+        red_op='≤' if m['id']=='reserve' and rule['red']==0 else op
+        facts[m['ref']]=f"{m['name']}：本期 {n(m['value'])}{m['unit']}；上期 {n(m['previous'])}{m['unit']}。用于判灯的{bases[rule['basis']]}为 {n(m['comparison'])}；黄线 {yellow_op}{n(rule['yellow'])}，红线 {red_op}{n(rule['red'])}（缺失代表该级未设置）。已计算状态：{labels[m['status']]}。阈值来源：{rule['source']}。{m['note']}"
     for s in result['simulation'].get('scenarios',[]):
         end={t['id']:t for t in s['months'][-1]['tranches']}
         tiers='；'.join(f"{t['name']}：最大预测本金覆盖损失 {cash(t['max_impairment'])}，占初始该档本金 {n(t['impairment_ratio'])}%；期末到期欠付 {cash(t['end_due_shortfall'])}；期末尚未到期本金 {cash(end[t['id']]['not_yet_due_principal'])}" for t in s['tranches'])
@@ -145,8 +147,9 @@ def validate_report(report,refs):
     def text(value,minimum=10,maximum=2500):
         if not isinstance(value,str) or not minimum<=len(value.strip())<=maximum:raise ValueError('Report text')
         # Numeric facts are shown from the deterministic evidence block, never retyped by the model.
-        cleaned=re.sub(r'\b(?:M\d+|[AD]\d+|[SFE]-[a-z]+(?:-\d+)?)\b','',value)
-        cleaned=re.sub(r'\b(?:DPD(?:1|30|90)\+?|PD12m|Top10%?|P[012])\b','',cleaned,flags=re.I)
+        cleaned=re.sub(r'(?<![A-Za-z0-9])(?:M\d+|[AD]\d+|[SFE]-[a-z]+(?:-\d+)?)(?![A-Za-z0-9])','',value)
+        cleaned=re.sub(r'(?<![A-Za-z0-9])(?:DPD(?:30|90|1)\+?|PD12m|Top\s*10%?|P[012])(?![A-Za-z0-9])','',cleaned,flags=re.I)
+        cleaned=re.sub(r'前10[%％](?=金额集中度|大额贷款|贷款)','',cleaned)
         if re.search(r'[0-9０-９]',cleaned):raise ValueError('Report numeric claims')
         return value.strip()
     def citations(value):
