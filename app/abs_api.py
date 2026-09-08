@@ -111,11 +111,11 @@ def build_model_request(data, catalog):
         payload['enable_thinking'] = ENABLE_THINKING == 'true'
     return payload, context
 
-def call_model(payload):
+def call_model(payload, timeout=50):
     req = urllib.request.Request(URL, data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
         headers={'Authorization': 'Bearer ' + API_KEY, 'Content-Type': 'application/json', 'User-Agent': 'ABS-Lens/2.0'}, method='POST')
     opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
-    with opener.open(req, timeout=50) as response:
+    with opener.open(req, timeout=timeout) as response:
         raw = response.read(262145)
         if len(raw) > 262144:
             raise ValueError('Upstream response too large')

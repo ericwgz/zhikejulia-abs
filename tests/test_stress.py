@@ -163,7 +163,7 @@ class StressApiTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();api.DATA_DIR=Path(self.tmp.name);api.ALLOWED_ORIGINS={'https://zhikejulia.com'}
         api.API_KEY='unit-test';api.MODEL='mock';api.URL='https://mock.invalid';work.RATE.clear();api.RECENT.clear();self.payloads=[]
         os.environ['ABS_WORK_SECURE_COOKIE']='false'
-        def model(payload):
+        def model(payload,**kwargs):
             self.payloads.append(payload)
             return json.dumps({'sections':[{'id':k,'analysis':'本期应结合回款与资产余额的变化复核信用风险，情景结果取决于假设，不能把尚未到期的余额直接视为损失，建议核对原始期间口径。','evidence_refs':['M1']} for k,t in stress.SECTIONS],
                                'actions':[{'priority':'P1','action':'复核本期逾期与回款台账','reason':'逾期变化可能影响回款兑现，应核实统计区间与新增违约去重口径。','trigger':'出现本期逾期上行时，核对新增与存量。','evidence_refs':['M1']} for _ in range(2)]},ensure_ascii=False)
@@ -203,7 +203,7 @@ class StressApiTests(unittest.TestCase):
         self.assertEqual(self.client.call('stress/datasets/delete',{'dataset_id':ds['id']})[0],200)
         self.assertEqual(self.client.call('stress/runs/'+r['id'])[0],404)
     def test_bad_model_preserves_results_and_retry(self):
-        ds=self.dataset();good=api.call_model;api.call_model=lambda p:'{"sections":[]}'
+        ds=self.dataset();good=api.call_model;api.call_model=lambda p,**kwargs:'{"sections":[]}'
         r=self.run_report(ds);self.assertEqual(r['ai']['status'],'failed');self.assertEqual(len(r['assessment']['metrics']),24)
         api.call_model=good;self.assertEqual(self.client.call('stress/report/retry',{'run_id':r['id']})[0],202)
         for _ in range(100):
@@ -215,9 +215,9 @@ class StressApiTests(unittest.TestCase):
         bad={'sections':[{'id':k,'analysis':'有效长度的分析文本'*10,'evidence_refs':['M999']} for k,_ in stress.SECTIONS],'actions':[]}
         with self.assertRaises(ValueError):stress.validate_report(bad,{'M1'})
         excerpt='本合约明确规定：DPD30逾期率超过3%为关注，超过5%为严重预警。'
-        api.call_model=lambda p:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'DPD30逾期率超过3%为关注，超过5%为严重预警。'}],'notes':[]},ensure_ascii=False)
+        api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'DPD30逾期率超过3%为关注，超过5%为严重预警。'}],'notes':[]},ensure_ascii=False)
         result=stress.parse_contract(api,'test','clause.txt',excerpt.encode());self.assertTrue(result['requires_confirmation']);self.assertEqual(result['thresholds']['dpd']['red'],5)
-        api.call_model=lambda p:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'这是伪造的合同条款'}],'notes':[]},ensure_ascii=False)
+        api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'这是伪造的合同条款'}],'notes':[]},ensure_ascii=False)
         with self.assertRaises(ValueError):stress.parse_contract(api,'test','clause.txt',excerpt.encode())
     def test_csv_xlsx_download_upload_and_partial_data(self):
         for suffix in ('csv','xlsx'):
