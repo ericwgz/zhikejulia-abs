@@ -230,6 +230,9 @@ class StressApiTests(unittest.TestCase):
         self.assertEqual(normalized['sections'][0]['evidence_refs'],['A1','D1','M1'])
         good['sections'][0]['analysis']='DPD30逾期指标与M1证据应核对，前10%金额集中度可能放大共同冲击，PD12m覆盖仍需补充核验。'
         stress.validate_report(good,{'M1','A1','D1'})
+        action_trigger=good['actions'][0]['trigger'];good['actions'][0]['trigger']="S-default.reserve_used === true"
+        with self.assertRaisesRegex(ValueError,'Report text'):stress.validate_report(good,{'M1','A1','D1'})
+        good['actions'][0]['trigger']=action_trigger
         good['sections'][0]['analysis']='本期CPR上升63.5%，但未超过50%的黄灯阈值。'+('需要核实数据依据。'*8)
         with self.assertRaisesRegex(ValueError,'numeric claims'):stress.validate_report(good,{'M1','A1','D1'})
         good['sections'][0]['analysis']='早偿率环比激增六成以上，基础恶化第六月触发加速。'+('需要核实数据依据。'*8)
