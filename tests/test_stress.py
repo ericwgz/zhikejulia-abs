@@ -221,6 +221,8 @@ class StressApiTests(unittest.TestCase):
             time.sleep(.01)
         self.assertEqual(b['ai']['status'],'ready');self.assertEqual(b['input_hash'],r['input_hash'])
     def test_evidence_ids_and_contract_quote_validation(self):
+        payload=stress.llm_payload(api,'JSON',{},model='qwen3-max')
+        self.assertEqual(payload['model'],'qwen3-max');self.assertEqual(payload['response_format'],{'type':'json_object'});self.assertFalse(payload['enable_thinking'])
         bad={'sections':[{'id':k,'analysis':'有效长度的分析文本'*10,'evidence_refs':['M999']} for k,_ in stress.SECTIONS],'actions':[]}
         with self.assertRaises(ValueError):stress.validate_report(bad,{'M1'})
         self.assertEqual(stress.REF_ALIASES['parameters'],'A1')
