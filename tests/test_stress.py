@@ -214,6 +214,11 @@ class StressApiTests(unittest.TestCase):
     def test_evidence_ids_and_contract_quote_validation(self):
         bad={'sections':[{'id':k,'analysis':'有效长度的分析文本'*10,'evidence_refs':['M999']} for k,_ in stress.SECTIONS],'actions':[]}
         with self.assertRaises(ValueError):stress.validate_report(bad,{'M1'})
+        self.assertEqual(stress.REF_ALIASES['parameters'],'A1')
+        good=json.loads(api.call_model({}))
+        good['sections'][0]['evidence_refs']=['parameters','synthetic','M1']
+        normalized=stress.validate_report(good,{'M1','A1','D1'})
+        self.assertEqual(normalized['sections'][0]['evidence_refs'],['A1','D1','M1'])
         excerpt='本合约明确规定：DPD30逾期率超过3%为关注，超过5%为严重预警。'
         api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'DPD30逾期率超过3%为关注，超过5%为严重预警。'}],'notes':[]},ensure_ascii=False)
         result=stress.parse_contract(api,'test','clause.txt',excerpt.encode());self.assertTrue(result['requires_confirmation']);self.assertEqual(result['thresholds']['dpd']['red'],5)

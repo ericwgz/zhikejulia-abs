@@ -19,6 +19,8 @@ IMPORT_GATE=threading.BoundedSemaphore(2)
 DB_LOCK=threading.Lock()
 SECTIONS=[('summary','执行摘要'),('quality','信用质量与变化归因'),('structure','结构与现金流薄弱环节'),
           ('scenarios','多情景比较与风险传导'),('events','瀑布切换与风险事件'),('limitations','数据局限与待复核事项')]
+REF_ALIASES={'parameters':'A1','assumptions':'A2','synthetic':'D1','metric_notes':'D2','data_issues':'D3','period':'D4','aggregates':'D5','score':'D6','signal':'D6',
+             'method_version':'D2','simulation_ready':'D7','simulation_missing':'D7','policy_event':'D8','product':'D9','input_hash':'D10','as_of':'D11','boundary':'D12'}
 def dumps(value):
     return json.dumps(value,ensure_ascii=False,separators=(',',':'),allow_nan=False)
 
@@ -79,13 +81,17 @@ def evidence_context(result):
                 evidence.append({k:month[k] for k in ('ref','period','state','interest_income','scheduled_principal','prepayment_principal','default_recovery','due_shortfall','principal_impairment','ending_reserve','pending_recoveries')})
             evidence.append({'ref':s['ref'],'name':s['name'],'max_due_shortfall':s['max_due_shortfall'],'max_principal_impairment':s['max_principal_impairment'],'delta_vs_base':s['delta_vs_base']})
             evidence.extend(s['events'])
-    return {'product':result['product'],'synthetic':result['synthetic'],'input_hash':result['input_hash'],'as_of':assessment['as_of'],
+    context={'product':result['product'],'synthetic':result['synthetic'],'input_hash':result['input_hash'],'as_of':assessment['as_of'],
             'score':assessment['score'],'signal':assessment['status'],'period':assessment['period'],'method_version':assessment['method_version'],
             'data_issues':result['issues'],'metric_notes':assessment['notes'],'aggregates':assessment['aggregates'],
             'simulation_ready':simulation['ready'],'simulation_missing':simulation.get('missing',[]),
             'policy_event':result['source_evidence']['latest'].get('policy'),
             'parameters':simulation['parameters'],'assumptions':simulation.get('assumptions',[]),'scenarios':scenarios,'evidence':evidence,
             'boundary':'仅为上传汇总的条件情景测算。数据未独立核验，风险灯和内部分数不是信用评级，未执行任何处置。'}
+    metadata={}
+    for key,ref in REF_ALIASES.items():metadata.setdefault(ref,{})[key]=context[key]
+    evidence.extend({'ref':ref,'name':'context','value':value} for ref,value in metadata.items())
+    return context
 
 
 def llm_payload(api, system, value, max_tokens=5000):
@@ -115,8 +121,11 @@ def validate_report(report,refs):
         if not isinstance(value,str) or not minimum<=len(value.strip())<=maximum:raise ValueError('Report text')
         return value.strip()
     def citations(value):
-        if not isinstance(value,list) or not 1<=len(value)<=12 or any(not isinstance(v,str) or v not in refs for v in value):raise ValueError('Report evidence')
-        return list(dict.fromkeys(value))
+        if not isinstance(value,list) or not 1<=len(value)<=12 or any(not isinstance(v,str) for v in value):raise ValueError('Report evidence')
+        # Exact aliases name real fields of this frozen context; arbitrary invented references still fail.
+        normalized=[REF_ALIASES.get(v,v) for v in value]
+        if any(v not in refs for v in normalized):raise ValueError('Report evidence')
+        return list(dict.fromkeys(normalized))
     sections=[]
     for raw,(key,title) in zip(report['sections'],SECTIONS):
         if not isinstance(raw,dict) or raw.get('id')!=key:raise ValueError('Report section order')
@@ -146,12 +155,14 @@ def run_ai(api,user,run_id,ip,attempt):
             '早偿增加本金而不是利息，不必然使优先级后置；预测期终点不是法定到期，未到期本金不能当损失。'
             'actions给2–4项管理人可执行建议，每项priority(P0/P1/P2)、action、reason、trigger、evidence_refs；须将储备补足、资产置换、次级收益限制或兑付节奏建议'
             '与本产品的证据和触发条件相连，不凭空声称有合约权限或给出无测算的最优金额。建议须有复核动作与适用前提。'
-            '证据refs只用资料里的M、S、F、E标识。不要Markdown围栏，不输出内在思维过程，给可核验的简明分析依据。')
+            '证据refs只用evidence列表实际提供的M、S、F、E、A、D标识；A1是参数、A2是瀑布假设、D1是合成属性、D2是口径、D3是数据问题。'
+            '不要Markdown围栏，不输出内在思维过程，给可核验的简明分析依据。')
         report=validate_report(safe_json(model_call(api,ip,llm_payload(api,system,context),timeout=120)),refs)
         ai={'status':'ready','report':report,'generated_at':work.now(),'model':api.MODEL,'attempt':attempt}
     except work.WorkError as error:ai={'status':'failed','message':error.message,'attempt':attempt}
     except Exception as error:
-        print(dumps({'event':'stress_model_error','type':type(error).__name__}),flush=True)
+        reasons={'Report schema','Report sections','Report text','Report evidence','Report section order','Report actions','Report action priority'}
+        print(dumps({'event':'stress_model_error','type':type(error).__name__,'reason':str(error) if str(error) in reasons else None}),flush=True)
         ai={'status':'failed','message':'模型响应超时或未满足固定报告及证据格式，请重试；指标和压力结果不受影响。','attempt':attempt}
     with closing(connect(api)) as conn,conn:
         row=conn.execute('SELECT ai_json FROM stress_runs WHERE id=? AND workspace_id=?',(run_id,user['workspace_id'])).fetchone()
