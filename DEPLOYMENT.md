@@ -16,7 +16,17 @@
 | 前端目录 | `/opt/badrams/current/app/static/abs/` |
 | 环境文件 | `/etc/badrams/abs-api.env`，root 0600 |
 | 持久数据 | `/srv/badrams-data/abs-api/`：`work.sqlite3`、`usage.sqlite3` |
+| 数据存储 | 40 GB 系统盘 `/dev/sda1`；2026-09-08 已迁回，原 500 GB `badrams-data` 卷已删除 |
 | 回滚备份 | `/opt/badrams/abs-backups/<release>/` |
+
+数据库仍使用原有路径。`/srv/badrams-data/` 现在是系统盘上的普通目录，
+PostgreSQL 的 `/var/lib/postgresql` 仍绑定到其中的 `postgresql/` 子目录。
+不要重新添加旧数据盘 UUID 的挂载配置；系统盘会随 VM 删除而丢失，删除或重建
+VM 前必须另行备份数据。定时备份服务已改为依赖数据路径，不依赖旧数据盘挂载单元。
+迁移前的 PostgreSQL 逻辑备份、全部数据冷备和配置副本已保存到项目所有者的本机，
+并在服务器 `/root/badrams-storage-migration-20260908-r2/` 保留一份。
+旧云快照 `pre-cutover-20260826` 未删除，其中记录的是迁移前的磁盘布局，不能直接
+作为当前磁盘布局的回滚入口；它是独立计费资源。
 
 ## 三类权限
 
