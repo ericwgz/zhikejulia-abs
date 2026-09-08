@@ -4,7 +4,7 @@ import math
 from datetime import date, timedelta
 from abs_stress_data import DataError
 
-VERSION = 'stress-1.0'
+VERSION = 'stress-1.1'
 # Values here use display units: percent, percentage points, yuan, months, multiples.
 SPECS = [
     ('dpd','逾期率 DPD30+','loan','%','DPD30+余额 / 资产池余额 × 100','value','gt',3,5),

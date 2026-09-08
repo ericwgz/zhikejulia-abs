@@ -116,6 +116,12 @@ class DataAndCalculationTests(unittest.TestCase):
         self.assertGreater(early['months'][0]['prepayment_principal'],base['months'][0]['prepayment_principal'])
         self.assertLess(early['interest_income'],base['interest_income'])
 
+    def test_acceleration_does_not_withhold_matured_junior_after_seniors_paid(self):
+        p=self.panels['SIM-ABS-02']
+        s=sim.simulate(p[-1],calc.calculate(p),{'months':12})['scenarios'][1]
+        self.assertEqual(s['months'][-1]['tranches'][-1]['due_shortfall'],0)
+        self.assertEqual(s['tranches'][-1]['balance'],0)
+
     def simple_sim(self,**changes):
         r={'balance':100,'dpd90_balance':0,'balance_term':12000,'reserve':0,'original_balance':100,'cumulative_additions':0,'cumulative_defaults':0,
            'a_balance':90,'b_balance':5,'sub_balance':5,'a_rate':0,'b_rate':0,'sub_rate':0,'a_maturity':120,'b_maturity':120,'sub_maturity':120}
@@ -219,6 +225,8 @@ class StressApiTests(unittest.TestCase):
         good['sections'][0]['evidence_refs']=['parameters','synthetic','M1']
         normalized=stress.validate_report(good,{'M1','A1','D1'})
         self.assertEqual(normalized['sections'][0]['evidence_refs'],['A1','D1','M1'])
+        good['sections'][0]['analysis']='本期CPR上升63.5%，但未超过50%的黄灯阈值。'+('需要核实数据依据。'*8)
+        with self.assertRaisesRegex(ValueError,'numeric claims'):stress.validate_report(good,{'M1','A1','D1'})
         excerpt='本合约明确规定：DPD30逾期率超过3%为关注，超过5%为严重预警。'
         api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'DPD30逾期率超过3%为关注，超过5%为严重预警。'}],'notes':[]},ensure_ascii=False)
         result=stress.parse_contract(api,'test','clause.txt',excerpt.encode());self.assertTrue(result['requires_confirmation']);self.assertEqual(result['thresholds']['dpd']['red'],5)

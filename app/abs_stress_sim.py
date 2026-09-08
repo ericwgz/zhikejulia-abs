@@ -126,6 +126,8 @@ def one_scenario(r,m,p,key,label):
         else:
             pay_interest('a');pay_interest('b')
             for k in ('a','b'):pay_principal(k,state=='accelerated',state=='normal' or due(tranches[k]))
+            if state=='accelerated' and all(tranches[k]['balance']+tranches[k]['interest_due']<=.01 for k in ('a','b')) and due(tranches['sub']):
+                pay_interest('sub');pay_principal('sub')
             if state=='normal':
                 target=balance*p['reserve_target_pct']/100
                 funded=min(cash,max(0,target-reserve));reserve+=funded;cash-=funded
