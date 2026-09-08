@@ -6,6 +6,11 @@
 基于报告的通义千问对话，以及 AI 异常建单、负责人分派、站内抄送和领导复核。
 所有产品和贷款指标均为演示数据。
 
+新增 `/#/stress` 压力测试工作台：上传CSV/XLSX资产池日度汇总，计算24项监控指标、
+信用分数与灯色，运行基准及四类3/6/12月压力情景，生成带证据的千问结构化报告。
+提供3只合成ABS的180天样本、合约DOCX/TXT阈值提取、报告与现金流导出。
+上传数据与现有固定演示产品分开保存。字段、公式和模型边界见 [STRESS_TESTING.md](STRESS_TESTING.md)。
+
 ## 本地运行
 
 需要 Python 3.10+。运行服务不需要安装第三方 Python 或 npm 包：
@@ -68,6 +73,7 @@ python scripts/deploy.py --key /path/to/abs_deploy
 | `app/static/abs/` | 原生 HTML/CSS/JS，产品及报告快照 |
 | `app/abs_api.py` | 服务端报告校验、Qwen 调用和限流 |
 | `app/abs_work.py` | 团队、工单、冻结证据、状态流转与通知 |
+| `app/abs_stress*.py` | 数据导入、24项指标、多期瀑布、冻结报告与模型分析 |
 | `scripts/dev.py` | 本地同源前端和 API 服务 |
 | `scripts/deploy.py` | 通过独立 SSH 凭据部署已提交代码 |
 | `deploy/` | 服务和代理配置参考、受限部署入口源代码 |

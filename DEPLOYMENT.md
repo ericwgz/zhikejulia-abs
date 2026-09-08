@@ -15,7 +15,7 @@
 | API 发布目录 | `/opt/badrams/abs-api/releases/`，`current` 指向在用版本 |
 | 前端目录 | `/opt/badrams/current/app/static/abs/` |
 | 环境文件 | `/etc/badrams/abs-api.env`，root 0600 |
-| 持久数据 | `/srv/badrams-data/abs-api/`：`work.sqlite3`、`usage.sqlite3` |
+| 持久数据 | `/srv/badrams-data/abs-api/`：`work.sqlite3`、`usage.sqlite3`、`stress.sqlite3` |
 | 数据存储 | 40 GB 系统盘 `/dev/sda1`；2026-09-08 已迁回，原 500 GB `badrams-data` 卷已删除 |
 | 回滚备份 | `/opt/badrams/abs-backups/<release>/` |
 
@@ -72,6 +72,9 @@ Windows 的私钥路径可以写成 `C:/Users/you/.ssh/abs_deploy`。macOS/Linux
 确认网页、`/api/abs/health`、`/api/abs/status` 正常；改动 AI 时，用合成产品进行
 一次实际对话验证。`configured: true` 只说明密钥存在，不保证上游调用成功。
 涉及工单时使用独立演示团队验证分派、通知、处理和复核，不修改真实团队数据。
+涉及压力测试时验证CSV/XLSX上传、24项计算、情景守恒与真实千问报告；使用独立
+合成数据团队。Nginx的 `/api/abs/work/stress/` 须单独允许1MB请求，其他接口保持
+原限制。该配置在zhikejulia和badrams两个域名入口都需保留，普通代码部署不覆盖它。
 
 ## AGIDock API
 

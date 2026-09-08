@@ -4,7 +4,7 @@
   "version": "3.0.0",
   "description": "ABS credit monitoring and team workbench",
   "scripts": {
-    "test": "node tests/test_scoring.cjs && node tests/test_workspace.cjs",
+    "test": "node tests/test_scoring.cjs && node tests/test_workspace.cjs && node tests/test_stress.cjs",
     "catalog": "node scripts/build-abs-catalog.cjs"
   },
   "devDependencies": {

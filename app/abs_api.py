@@ -17,6 +17,7 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import abs_work
+import abs_stress
 
 BASE = Path(__file__).resolve().parent
 CATALOG_PATH = Path(os.environ.get('ABS_CATALOG_PATH', BASE / 'static' / 'abs' / 'catalog.json'))
@@ -181,6 +182,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
+        if path.startswith(abs_stress.PREFIX):
+            return abs_stress.handle(self, sys.modules[__name__])
         if path.startswith('/api/abs/work/'):
             return abs_work.handle(self, sys.modules[__name__])
         if path == '/api/abs/status':
@@ -191,6 +194,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(404, {'message': '接口不存在。'})
 
     def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path.startswith(abs_stress.PREFIX):
+            return abs_stress.handle(self, sys.modules[__name__])
         if urllib.parse.urlsplit(self.path).path.startswith('/api/abs/work/'):
             return abs_work.handle(self, sys.modules[__name__])
         if urllib.parse.urlsplit(self.path).path != '/api/abs/chat':

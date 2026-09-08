@@ -11,6 +11,7 @@
 __pycache__/
 *.pyc
 .local-data/
+.local-npm-cache/
 .venv/
 node_modules/
 dist/

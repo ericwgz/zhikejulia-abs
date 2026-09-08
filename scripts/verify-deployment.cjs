@@ -8,7 +8,7 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
   const result=await response.json();if(endpoint==='health'){assert.equal(result.ok,true);assert.equal(result.catalogReady,true);}
   console.log(JSON.stringify({endpoint,result}));
  }
- for(const name of ['index.html','workspace.js','workspace.css','scoring.js','catalog.json','tickets.js','tickets.css']){
+ for(const name of ['index.html','workspace.js','workspace.css','scoring.js','catalog.json','tickets.js','tickets.css','stress.js','stress.css']){
   const expected=cp.execFileSync('git',['show',commit+':app/static/abs/'+name],{cwd:root});
   const response=await fetch('https://zhikejulia.com/'+name+'?verify='+commit,{signal:AbortSignal.timeout(20000)});assert.equal(response.status,200,name);
   assert.equal(hash(Buffer.from(await response.arrayBuffer())),hash(expected),'Live file differs: '+name);
