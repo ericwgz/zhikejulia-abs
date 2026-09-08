@@ -203,7 +203,8 @@ class StressApiTests(unittest.TestCase):
         self.assertEqual(r['assessment']['assessed'],24);self.assertEqual(len(r['simulation']['scenarios']),5)
         ctx=json.loads(self.payloads[-1]['messages'][1]['content'].split('\n',1)[1]);self.assertNotIn('source_evidence',ctx);self.assertNotIn('panel_json',ctx)
         reserve=next(m for m in r['assessment']['metrics'] if m['id']=='reserve')
-        self.assertIn('红线 ≤0',next(e['fact'] for e in ctx['evidence'] if e['ref']==reserve['ref']))
+        self.assertIn('红线 ≤0',stress.facts_for_model(r)[1][reserve['ref']])
+        self.assertEqual(next(e for e in ctx['evidence'] if e['ref']==reserve['ref'])['signal'],'绿灯')
         b=Client(self.base);b.demo();self.assertEqual(b.call('stress/runs/'+r['id'])[0],404)
         self.assertEqual(b.call('stress/report/retry',{'run_id':r['id']})[0],404)
         self.assertEqual(b.call('stress/datasets/delete',{'dataset_id':ds['id']})[0],404)
@@ -230,6 +231,8 @@ class StressApiTests(unittest.TestCase):
         good['sections'][0]['analysis']='DPD30逾期指标与M1证据应核对，前10%金额集中度可能放大共同冲击，PD12m覆盖仍需补充核验。'
         stress.validate_report(good,{'M1','A1','D1'})
         good['sections'][0]['analysis']='本期CPR上升63.5%，但未超过50%的黄灯阈值。'+('需要核实数据依据。'*8)
+        with self.assertRaisesRegex(ValueError,'numeric claims'):stress.validate_report(good,{'M1','A1','D1'})
+        good['sections'][0]['analysis']='早偿率环比激增六成以上，基础恶化第六月触发加速。'+('需要核实数据依据。'*8)
         with self.assertRaisesRegex(ValueError,'numeric claims'):stress.validate_report(good,{'M1','A1','D1'})
         excerpt='本合约明确规定：DPD30逾期率超过3%为关注，超过5%为严重预警。'
         api.call_model=lambda p,**kwargs:json.dumps({'thresholds':[{'metric_id':'dpd','yellow':3,'red':5,'quote':'DPD30逾期率超过3%为关注，超过5%为严重预警。'}],'notes':[]},ensure_ascii=False)
