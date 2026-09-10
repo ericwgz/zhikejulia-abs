@@ -163,6 +163,26 @@ class Client:
     def demo(self):self.call('auth/demo',{});self.call('session')
 
 
+def mock_report(context=None):
+    def tokens(value):
+        if isinstance(value,dict):
+            if 'token' in value:yield value['token']
+            for child in value.values():yield from tokens(child)
+        elif isinstance(value,list):
+            for child in value:yield from tokens(child)
+    evidence={e['ref']:e for e in (context or {}).get('evidence',[])}
+    sections=[]
+    for key,title in stress.SECTIONS:
+        refs=list((context or {}).get('section_refs',{}).get(key,['M1']))[:2]
+        if key=='summary' and context:refs=['D6','D3']
+        if key=='scenarios' and 'S-base' in evidence:refs=['S-base','S-default']
+        token=next((token for ref in refs for token in tokens(evidence.get(ref,{}))), '')
+        sections.append({'id':key,'analysis':title+'：本次计算依据显示'+token+'，应结合对应统计期间和确认的交易参数解释结果。该项观察需要通过上传记录核查，不能直接认定因果或实际发生法律事件。','evidence_refs':refs})
+    return {'sections':sections,'actions':[
+        {'priority':'P1','action':'复核本期逾期与回款台账','reason':'应核实逾期余额的统计区间与新增违约去重口径。','trigger':'出现逾期变化时，核对新增与存量记录。','evidence_refs':['M1']},
+        {'priority':'P2','action':'补充资产池的历史分组台账','reason':'汇总记录不足以判断具体借款人行为，需要核对原始分组明细。','trigger':'核对发现统计口径不一致时补充资料。','evidence_refs':['M1']} ]}
+
+
 class StressApiTests(unittest.TestCase):
     def setUp(self):
         self.old={k:getattr(api,k) for k in ('DATA_DIR','API_KEY','MODEL','URL','ALLOWED_ORIGINS','call_model')}
@@ -171,8 +191,9 @@ class StressApiTests(unittest.TestCase):
         os.environ['ABS_WORK_SECURE_COOKIE']='false'
         def model(payload,**kwargs):
             self.payloads.append(payload)
-            return json.dumps({'sections':[{'id':k,'analysis':'本期应结合回款与资产余额的变化复核信用风险，情景结果取决于假设，不能把尚未到期的余额直接视为损失，建议核对原始期间口径。','evidence_refs':['M1']} for k,t in stress.SECTIONS],
-                               'actions':[{'priority':'P1','action':'复核本期逾期与回款台账','reason':'逾期变化可能影响回款兑现，应核实统计区间与新增违约去重口径。','trigger':'出现本期逾期上行时，核对新增与存量。','evidence_refs':['M1']} for _ in range(2)]},ensure_ascii=False)
+            value=payload.get('messages',[{},{}])[1].get('content','')
+            context=json.loads(value.split('\n',1)[1]) if value else None
+            return json.dumps(mock_report(context),ensure_ascii=False)
         api.call_model=model
         self.server=ThreadingHTTPServer(('127.0.0.1',0),api.Handler);threading.Thread(target=self.server.serve_forever,daemon=True).start()
         self.base=f'http://127.0.0.1:{self.server.server_port}/api/abs/work/';self.client=Client(self.base);self.client.demo()
@@ -200,6 +221,8 @@ class StressApiTests(unittest.TestCase):
         self.assertEqual(self.client.call('stress/upload',{'filename':'a.csv','content':base64.b64encode(b'x'*700001).decode()})[0],400)
     def test_frozen_run_real_schema_model_context_and_team_isolation(self):
         ds=self.dataset();r=self.run_report(ds);self.assertEqual(r['ai']['status'],'ready',r['ai']);self.assertEqual(len(r['ai']['report']['sections']),6)
+        self.assertEqual(r['ai']['prompt_version'],'data-grounded-2.0');self.assertEqual(len(r['ai']['context_hash']),64)
+        self.assertNotIn('{{',json.dumps(r['ai']['report']))
         self.assertEqual(r['assessment']['assessed'],24);self.assertEqual(len(r['simulation']['scenarios']),5)
         ctx=json.loads(self.payloads[-1]['messages'][1]['content'].split('\n',1)[1]);self.assertNotIn('source_evidence',ctx);self.assertNotIn('panel_json',ctx)
         reserve=next(m for m in r['assessment']['metrics'] if m['id']=='reserve')
