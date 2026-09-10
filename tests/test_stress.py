@@ -166,7 +166,7 @@ class Client:
 def mock_report(context=None):
     def tokens(value):
         if isinstance(value,dict):
-            if 'token' in value:yield value['token']
+            if 'token' in value and value.get('value') is not None and value.get('kind') not in ('literal','missing'):yield value['token']
             for child in value.values():yield from tokens(child)
         elif isinstance(value,list):
             for child in value:yield from tokens(child)

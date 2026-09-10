@@ -46,7 +46,15 @@ def build_context(result):
 
     def quantity(ref, field, value, unit, label, missing='缺失'):
         if value is None:
-            return {'value': None, 'unit': unit, 'label': label, 'text': missing}
+            item = {'value': None, 'unit': unit, 'label': label, 'text': missing}
+            is_missing_metric = ref.startswith('M') and ref[1:].isdigit() and field in ('value', 'previous', 'comparison')
+            if is_missing_metric or (ref == 'D6' and field == 'score'):
+                key = ref + '.' + field
+                item.update(token='{{' + key + '}}', kind='missing')
+                if ref == 'D6':
+                    item['text'] = '待评估（未形成总分）'
+                bindings[key] = {'ref': ref, **item}
+            return item
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             raise ValueError('Report evidence requires a finite number')
         shown, display_unit = (value / 10000, '万元') if unit == '元' else (value, unit)
@@ -226,7 +234,9 @@ def build_context(result):
                         for key, val in assessment['aggregates'].items()}},
         {'ref': 'D6', 'name': '内部监控总览', 'score': quantity('D6', 'score', assessment['score'], '分', '程序计算的信用监控分'),
          'signal': LABELS[assessment['status']], 'score_boundary': '内部阈值监控分，不是信用评级'},
-        {'ref': 'D7', 'name': '压力推演完整性', 'ready': simulation['ready'], 'missing': missing_sim},
+        {'ref': 'D7', 'name': '压力推演完整性', 'ready': simulation['ready'], 'missing': missing_sim,
+         'readiness': literal('D7', 'ready', '可模拟' if simulation['ready'] else '无法模拟（数据不完整）', '本次压力推演可用状态'),
+         'missing_summary': literal('D7', 'missing', '、'.join(item['name'] for item in missing_sim), '压力推演缺失字段')},
         {'ref': 'D8', 'name': '政策来源', 'source': '仅来自上传汇总的政策标记，未联网核实；原始自由文本不传给模型'},
         {'ref': 'D9', 'name': '当前分析产品', 'product': result['product']},
         {'ref': 'D10', 'name': '冻结输入身份', 'input_hash': result['input_hash'],

@@ -62,7 +62,11 @@ class GroundedNarrativeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'incomplete score'):base.stress.validate_report(report,refs,bindings,context['section_refs'])
         report['sections'][0]['analysis']=report['sections'][0]['analysis'].replace('整体信用表现尚处绿灯。','无法得出总体低风险结论。')
         report['sections'][0]['analysis']+='内部总分为{{D6.score}}。'
-        with self.assertRaisesRegex(ValueError,'value binding'):base.stress.validate_report(report,refs,bindings,context['section_refs'])
+        rendered=base.stress.validate_report(report,refs,bindings,context['section_refs'])
+        self.assertIn('待评估（未形成总分）',rendered['sections'][0]['analysis'])
+        self.assertNotIn('0分',rendered['sections'][0]['analysis'])
+        report['sections'][0]['analysis']+='内部总分为0分。'
+        with self.assertRaisesRegex(ValueError,'numeric claims'):base.stress.validate_report(report,refs,bindings,context['section_refs'])
 
     def test_one_bounded_format_correction_preserves_context(self):
         good=base.mock_report(self.context)

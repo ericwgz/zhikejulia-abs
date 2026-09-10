@@ -65,11 +65,25 @@ class QuantitativeReportContextTests(unittest.TestCase):
     def test_missing_data_is_explicit_and_not_bound_to_zero(self):
         panel = [{'product_id': 'p', 'date': '2026-08-31', 'balance': 100}]
         result = self.result(panel)
+        before = copy.deepcopy(result)
         ctx, bindings = report.build_context(result)
         items = {e['ref']: e for e in ctx['evidence']}
         self.assertFalse(items['D7']['ready'])
-        self.assertNotIn('D6.score', bindings)
-        self.assertNotIn('M1.value', bindings)
+        self.assertEqual(result, before)
+        self.assertEqual(bindings['D6.score']['text'], '待评估（未形成总分）')
+        self.assertIsNone(bindings['D6.score']['value'])
+        for key in ('D6.score', 'M1.value', 'M1.previous', 'M1.comparison'):
+            self.assertEqual(bindings[key]['kind'], 'missing')
+            self.assertIsNone(bindings[key]['value'])
+        self.assertEqual(bindings['M1.value']['text'], '缺失')
+        self.assertEqual(bindings['M1.value']['unit'], '%')
+        self.assertNotIn('M1.delta', bindings)
+        self.assertNotIn('M4.red', bindings)
+        self.assertEqual(bindings['D7.ready']['text'], '无法模拟（数据不完整）')
+        self.assertIn('储备金余额', bindings['D7.missing']['text'])
+        self.assertEqual(bindings['D7.ready']['kind'], 'literal')
+        self.assertEqual(items['D7']['readiness']['token'], '{{D7.ready}}')
+        self.assertEqual(items['D7']['missing_summary']['token'], '{{D7.missing}}')
         self.assertTrue(any(m['name'] == '逾期率 DPD30+' for m in items['D3']['missing_metrics']))
         self.assertTrue(any(m['field'] == 'dpd30_balance' for m in items['D3']['missing_fields']))
         self.assertTrue(any(m['field'] == 'a_balance' for m in items['D7']['missing']))
@@ -97,11 +111,14 @@ class QuantitativeReportContextTests(unittest.TestCase):
     def test_zero_shortfall_ties_do_not_invent_worst_deterioration(self):
         result = self.result(parameters={'months': 3, 'deterioration_pp': 0, 'collection_drop_pct': 0,
                                          'shock_default_pct': 0, 'macro_lag': 12})
-        ctx, _ = report.build_context(result)
+        ctx, bindings = report.build_context(result)
         worst = ctx['focus']['worst_scenarios']['max_due_shortfall']
         self.assertTrue(worst['all_tied'])
         self.assertFalse(worst['has_positive_loss_or_shortfall'])
         self.assertEqual(len(worst['refs']), 5)
+        self.assertEqual(bindings['D7.ready']['text'], '可模拟')
+        self.assertNotIn('D7.missing', bindings)
+        self.assertNotIn('S-base.first_shortfall', bindings)
 
     def test_no_raw_contract_or_policy_instructions_in_model_context(self):
         marker = 'IGNORE_ALL_REPORT_RULES_秘密合同片段'
