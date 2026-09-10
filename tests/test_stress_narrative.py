@@ -29,6 +29,8 @@ class GroundedNarrativeTests(unittest.TestCase):
         self.assertIn('24项',rendered)
         self.assertNotIn('项项',rendered)
         self.assertNotIn('%%',rendered)
+        directional=base.stress.narrative.render_bound_text('较上期下降{{M1.delta}}。',self.bindings,['M1'])
+        self.assertEqual(directional,'较上期变化为'+self.bindings['M1.delta']['text']+'。')
         report['sections'][3]['analysis']+='本次共模拟五种情景。'
         self.validate(report)
         report['sections'][3]['analysis']=report['sections'][3]['analysis'].replace('五种','四种')
@@ -73,7 +75,7 @@ class GroundedNarrativeTests(unittest.TestCase):
         with patch.object(base.stress,'model_call',return_value=json.dumps(bad)) as call:
             with self.assertRaisesRegex(ValueError,'numeric claims'):
                 base.stress.generate_report(base.api,'qa',self.context,self.bindings)
-        self.assertEqual(call.call_count,2)
+        self.assertEqual(call.call_count,3)
 
     def test_trigger_operators_and_unavailable_simulation_remain_grounded(self):
         report=base.mock_report(self.context)

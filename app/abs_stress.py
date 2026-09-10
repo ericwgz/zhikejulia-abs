@@ -231,7 +231,7 @@ def report_payload(api,context):
 def generate_report(api,ip,context,bindings):
     payload=report_payload(api,context);refs={e['ref'] for e in context['evidence']}
     deadline=time.monotonic()+140
-    for attempt in range(2):
+    for attempt in range(3):
         remaining=deadline-time.monotonic()
         if remaining<10:raise ValueError('Report text')
         answer=model_call(api,ip,payload,timeout=min(120,remaining))
@@ -239,7 +239,7 @@ def generate_report(api,ip,context,bindings):
             report=validate_report(safe_json(answer),refs,bindings,context['section_refs'])
             return report,payload['model'],attempt
         except ValueError as error:
-            if attempt:raise
+            if attempt==2:raise
             unknown=sorted({token for token in narrative.TOKEN.findall(answer) if token not in bindings})
             uncited=[]
             try:

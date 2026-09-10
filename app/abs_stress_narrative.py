@@ -54,6 +54,12 @@ def output_schema():
 
 
 def render_bound_text(value, bindings, evidence_refs):
+    def direction(match):
+        key=match.group(1)
+        if key in bindings and '.delta' in key:
+            return '变化为{{'+key+'}}'
+        return match.group(0)
+    value=re.sub(r'(?:减少|下降|增加|上升|降低|提高|微升|微降)(?:了|至|为)?\{\{([A-Za-z0-9_.-]+)\}\}',direction,value)
     def replace(match):
         binding = bindings.get(match.group(1))
         if not binding or binding['ref'] not in evidence_refs: raise ValueError('Report value binding')
