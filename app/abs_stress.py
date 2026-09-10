@@ -18,6 +18,7 @@ import abs_stress_sim as sim
 import abs_stress_pdf as pdf
 import abs_stress_report as reporting
 import abs_stress_narrative as narrative
+import abs_stress_binding as binding
 
 PREFIX='/api/abs/work/stress/'
 REPORT_MODEL=os.environ.get('ABS_STRESS_LLM_MODEL','').strip()
@@ -159,15 +160,7 @@ def validate_report(report,refs,bindings=None,section_refs=None):
     def text(value,evidence_refs,minimum=10,maximum=2500):
         if not isinstance(value,str) or not minimum<=len(value.strip())<=maximum:raise ValueError('Report text')
         rendered=narrative.render_bound_text(value,bindings,evidence_refs)
-        cleaned=narrative.TOKEN.sub('',value)
-        cleaned=re.sub(r'(?<![A-Za-z0-9])(?:M\d+|[AD]\d+|[SFE]-[a-z]+(?:-\d+)?)(?![A-Za-z0-9])','',cleaned)
-        cleaned=re.sub(r'(?<![A-Za-z0-9])(?:DPD(?:30|90|1)\+?|PD12m|Top\s*10%?|P[012])(?![A-Za-z0-9])','',cleaned,flags=re.I)
-        cleaned=re.sub(r'前10[%％](?=金额集中度|大额贷款|贷款|笔数)','',cleaned)
-        if len([ref for ref in refs if ref.startswith('S-')])==5:
-            cleaned=re.sub(r'(?:五种|5种)(?=情景)','',cleaned)
-        patterns=[r'[0-9０-９]',r'百分之[零〇一二三四五六七八九十百两]|[零〇一二三四五六七八九十百千万亿两]+(?:成|个?月|元|个百分点|倍|分之)|第[零〇一二三四五六七八九十百两]+[月期]',
-                  r'[零〇一二三四五六七八九十百千万亿两]+(?:点[零〇一二三四五六七八九]+)?(?:[%％]|分(?![比析配别散])|期|天|项|种)']
-        violations=[cleaned[max(0,m.start()-8):m.end()+12] for pattern in patterns for m in re.finditer(pattern,cleaned)]
+        cleaned,violations=narrative.numeric_parts(value,refs)
         if violations:
             error=ValueError('Report numeric claims');error.detail=dumps(violations[:8]);raise error
         for claim in re.finditer(r'循环(?:购买|补充|补池).{0,12}(?:正常|顺畅)|(?:实际存在|本交易存在)循环购买|前十大额',cleaned):
@@ -183,7 +176,7 @@ def validate_report(report,refs,bindings=None,section_refs=None):
     sections=[];seen=set()
     for raw,(key,title) in zip(report['sections'],SECTIONS):
         if not isinstance(raw,dict) or raw.get('id')!=key:raise ValueError('Report section order')
-        cited=citations(raw.get('evidence_refs'));value=raw.get('analysis')
+        cited=citations(raw.get('evidence_refs'));value=binding.normalize(raw.get('analysis'),bindings,cited)
         analysis=text(value,cited,40)
         canonical=narrative.paragraph_key(value)
         if canonical in seen:raise ValueError('Report repeated sections')
@@ -211,7 +204,7 @@ def validate_report(report,refs,bindings=None,section_refs=None):
         if not isinstance(a,dict) or a.get('priority') not in ('P0','P1','P2'):raise ValueError('Report action priority')
         cited=citations(a.get('evidence_refs'))
         if bindings and any(re.fullmatch(r'M\d+\.(?:yellow|red)',token) for token in narrative.TOKEN.findall(a.get('trigger',''))):raise ValueError('Report trigger condition')
-        item={'priority':a['priority'],'action':text(a.get('action'),cited,5,300),'reason':text(a.get('reason'),cited,15,800),
+        item={'priority':a['priority'],'action':text(a.get('action'),cited,5,300),'reason':text(binding.normalize(a.get('reason'),bindings,cited),cited,15,800),
               'trigger':text(a.get('trigger'),cited,5,500),'evidence_refs':cited}
         canonical=narrative.paragraph_key(a['action'])
         if canonical in seen_actions:raise ValueError('Report repeated actions')
@@ -241,7 +234,7 @@ def generate_report(api,ip,context,bindings):
         except ValueError as error:
             if attempt==2:raise
             unknown=sorted({token for token in narrative.TOKEN.findall(answer) if token not in bindings})
-            uncited=[]
+            uncited=[];numeric_issues=[]
             try:
                 draft=safe_json(answer)
                 for item in draft.get('sections',[])+draft.get('actions',[]):
@@ -249,6 +242,12 @@ def generate_report(api,ip,context,bindings):
                     values=' '.join(str(item.get(key,'')) for key in ('analysis','action','reason','trigger'))
                     absent=sorted({bindings[t]['ref'] for t in narrative.TOKEN.findall(values) if t in bindings and bindings[t]['ref'] not in (item.get('evidence_refs') or [])})
                     if absent:uncited.append({'paragraph':item.get('id') or item.get('action'),'missing_refs':absent})
+                    for key in ('analysis','action','reason','trigger'):
+                        value=item.get(key)
+                        if not isinstance(value,str):continue
+                        if key in ('analysis','reason'):value=binding.normalize(value,bindings,item.get('evidence_refs') or [])
+                        violations=narrative.numeric_parts(value,refs)[1]
+                        if violations:numeric_issues.append({'paragraph':item.get('id') or item.get('priority'),'field':key,'fragments':violations[:4]})
             except (ValueError,TypeError,AttributeError):pass
             guidance={'Report trigger condition':'trigger中的监控阈值须替换为完整yellow_condition/red_condition标记，不能只引用yellow/red数字。',
                 'Report incomplete score':'总分缺失必须标为待评估，不能把部分已评估指标的绿灯写成整体绿灯或总体低风险。',
@@ -261,6 +260,7 @@ def generate_report(api,ip,context,bindings):
                 '正文不得出现裸写的数字或中文量化（例如零万元、三期、连续两月、阈值的一半）。'
                 '每个token所属ref必须加入该段evidence_refs，不能把整个对象写成token。'
                 '当前遗漏引用：'+dumps(uncited)+'。'
+                '各段尚未绑定或未能核对的数字：'+dumps(numeric_issues[:16])+'。行动trigger里的监控阈值请使用完整condition标记。'
                 '没有token的量化内容请改为不含具体数字的准确描述，不要编造标记。未知标记：'+dumps(unknown)+
                 '。使用“变化为”连接有符号delta，避免下降负数；未越线不等于安全无风险。只返回完整JSON。'}])
 

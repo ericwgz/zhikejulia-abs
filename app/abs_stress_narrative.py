@@ -74,3 +74,16 @@ def render_bound_text(value, bindings, evidence_refs):
 
 def paragraph_key(value):
     return re.sub(r'[\W_]+', '', TOKEN.sub('', value)).casefold()
+
+
+def numeric_parts(value, refs):
+    cleaned=TOKEN.sub('',value)
+    cleaned=re.sub(r'(?<![A-Za-z0-9])(?:M\d+|[AD]\d+|[SFE]-[a-z]+(?:-\d+)?)(?![A-Za-z0-9])','',cleaned)
+    cleaned=re.sub(r'(?<![A-Za-z0-9])(?:DPD(?:30|90|1)\+?|PD12m|Top\s*10%?|P[012])(?![A-Za-z0-9])','',cleaned,flags=re.I)
+    cleaned=re.sub(r'前(?:10[%％]|百分之十)(?:的)?(?=金额集中度|大额贷款|贷款|笔数)','',cleaned)
+    if len([ref for ref in refs if ref.startswith('S-')])==5:
+        cleaned=re.sub(r'(?:五种|5种)(?=情景)','',cleaned)
+    patterns=[r'[0-9０-９]',r'百分之[零〇一二三四五六七八九十百两]|[零〇一二三四五六七八九十百千万亿两]+(?:成|个?月|元|个百分点|倍|分之)|第[零〇一二三四五六七八九十百两]+[月期]',
+              r'[零〇一二三四五六七八九十百千万亿两]+(?:点[零〇一二三四五六七八九]+)?(?:[%％]|分(?![比析配别散])|期|天|项|种)']
+    violations=[cleaned[max(0,m.start()-8):m.end()+12] for pattern in patterns for m in re.finditer(pattern,cleaned)]
+    return cleaned,violations
