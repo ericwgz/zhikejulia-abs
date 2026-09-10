@@ -75,6 +75,11 @@ Windows 的私钥路径可以写成 `C:/Users/you/.ssh/abs_deploy`。macOS/Linux
 涉及压力测试时验证CSV/XLSX上传、24项计算、情景守恒与真实千问报告；使用独立
 合成数据团队。Nginx的 `/api/abs/work/stress/` 须单独允许1MB请求，其他接口保持
 原限制。该配置在zhikejulia和badrams两个域名入口都需保留，普通代码部署不覆盖它。
+PDF合约上传另设精确路径 `location = /api/abs/work/stress/contract`，允许7 MB请求
+（5 MB PDF经Base64编码），代理到同一ABS API；其他stress接口仍限1 MB。
+此Nginx路径由所有者维护连接安装并通过 `nginx -t` 后平滑重载，两个域名入口均需保留。
+PDF解析在后台最多等待300秒，前端轮询团队隔离的短期任务；无需延长代理读取超时。
+上线须分别用文字版及纯图片PDF实际验证模型、阈值、物理页码及人工确认流程。
 
 ## AGIDock API
 

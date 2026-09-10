@@ -43,7 +43,7 @@ class DataError(ValueError):
     pass
 
 
-def decode_file(data):
+def decode_file(data, pdf_contract=False):
     name = data.get('filename')
     if not isinstance(name, str) or len(name) > 160:
         raise DataError('文件名无效。')
@@ -51,7 +51,9 @@ def decode_file(data):
         content = base64.b64decode(data.get('content', ''), validate=True)
     except (ValueError, TypeError):
         raise DataError('文件编码无法读取。') from None
-    if not 0 < len(content) <= MAX_FILE:
+    limit = 5_000_000 if pdf_contract and name.lower().endswith('.pdf') else MAX_FILE
+    if not 0 < len(content) <= limit:
+        if limit > MAX_FILE: raise DataError('PDF单个文件限5 MB，请上传包含监控阈值的合约节选。')
         raise DataError('单个文件限 700 KB；请使用资产池日度汇总数据。')
     return name, content
 
@@ -285,6 +287,6 @@ def contract_text(filename, raw):
     elif filename.lower().endswith('.txt'):
         try: content=raw.decode('utf-8-sig')
         except UnicodeDecodeError: raise DataError('TXT 合约请使用 UTF-8 编码。') from None
-    else: raise DataError('合约暂支持 DOCX 或 TXT 文本版；请先将扫描件转换为文字。')
+    else: raise DataError('合约支持 PDF、DOCX 或 UTF-8 TXT，请选择相应文件。')
     if not 20 <= len(content) <= 30000: raise DataError('合约文字须为 20–30000 字；请上传涉及触发阈值的条款节选。')
     return content

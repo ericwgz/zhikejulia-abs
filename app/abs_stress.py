@@ -15,6 +15,7 @@ import abs_work as work
 import abs_stress_data as data
 import abs_stress_calc as calc
 import abs_stress_sim as sim
+import abs_stress_pdf as pdf
 
 PREFIX='/api/abs/work/stress/'
 REPORT_MODEL=os.environ.get('ABS_STRESS_LLM_MODEL','').strip()
@@ -322,7 +323,8 @@ def handle(handler,api):
             if not handler.headers.get('Content-Type','').lower().startswith('application/json'):raise work.WorkError(415,'请使用JSON请求。')
             try:size=int(handler.headers.get('Content-Length','0'))
             except ValueError:raise work.WorkError(400,'请求长度无效。') from None
-            if not 0<size<=980_000:raise work.WorkError(413,'上传请求过大，单个文件限700 KB。')
+            limit=pdf.MAX_BODY if path=='contract' else 980_000
+            if not 0<size<=limit:raise work.WorkError(413,'上传请求过大，PDF限5 MB，其他文件限700 KB。')
             try:body=json.loads(handler.rfile.read(size),parse_constant=lambda x: (_ for _ in ()).throw(ValueError('Non-finite JSON')))
             except (ValueError,UnicodeDecodeError):raise work.WorkError(400,'JSON格式无效。') from None
             if not isinstance(body,dict):raise work.WorkError(400,'请求须为JSON对象。')
@@ -354,8 +356,12 @@ def handle(handler,api):
                 conn.execute('DELETE FROM stress_datasets WHERE id=? AND workspace_id=?',(row['id'],user['workspace_id']))
             return work.send(handler,200,{'ok':True})
         if method=='POST' and path=='contract':
-            name,raw=data.decode_file(body)
+            name,raw=data.decode_file(body,pdf_contract=True)
+            if name.lower().endswith('.pdf'):
+                return work.send(handler,202,pdf.start(api,user,ip,name,raw,REPORT_MODEL or api.MODEL,model_call,safe_json))
             return work.send(handler,200,parse_contract(api,ip,name,raw))
+        if method=='GET' and path.startswith('contracts/'):
+            return work.send(handler,200,pdf.view(path.split('/')[1],user))
         if method=='POST' and path=='run':
             if body.get('assumptions_confirmed') is not True:raise work.WorkError(400,'请先核对并确认当前计算口径与演示合同参数。')
             with closing(connect(api)) as conn:row=get_owned(conn,'stress_datasets',body.get('dataset_id'),user)
