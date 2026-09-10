@@ -166,6 +166,9 @@ def validate_report(report,refs,bindings=None,section_refs=None):
         for claim in re.finditer(r'循环(?:购买|补充|补池).{0,12}(?:正常|顺畅)|(?:实际存在|本交易存在)循环购买|前十大额',cleaned):
             prefix=re.split(r'[。；，]',cleaned[:claim.start()])[-1][-16:]
             if not re.search(r'不能|无法|不足以|不代表|不证明|未验证|需核对|不是',prefix):raise ValueError('Report unsupported inference')
+        for claim in re.finditer(r'(?:当前|本期|目前).{0,6}(?:无实质(?:性)?违约|未发生实际违约|未触发法律违约)',cleaned):
+            prefix=re.split(r'[。；，]',cleaned[:claim.start()])[-1]
+            if not re.search(r'不能|无法|不代表|不得',prefix):raise ValueError('Report unsupported inference')
         if re.search(r'===?|!==?|&&|\|\|',cleaned):raise ValueError('Report text')
         return rendered.strip()
     def citations(value):
@@ -229,7 +232,16 @@ def generate_report(api,ip,context,bindings):
         if remaining<10:raise ValueError('Report text')
         answer=model_call(api,ip,payload,timeout=min(120,remaining))
         try:
-            report=validate_report(safe_json(answer),refs,bindings,context['section_refs'])
+            draft=safe_json(answer)
+            if isinstance(draft,dict) and isinstance(draft.get('sections'),list) and isinstance(draft.get('actions'),list):
+                for item in draft['sections']+draft['actions']:
+                    if not isinstance(item,dict) or not isinstance(item.get('evidence_refs'),list):continue
+                    values=' '.join(value for key in ('analysis','action','reason','trigger') if isinstance(value:=item.get(key),str))
+                    # Valid numeric bindings already identify their exact source. Attach it deterministically.
+                    inferred=[bindings[token]['ref'] for token in narrative.TOKEN.findall(values) if token in bindings]
+                    for ref in inferred:
+                        if ref not in item['evidence_refs']:item['evidence_refs'].append(ref)
+            report=validate_report(draft,refs,bindings,context['section_refs'])
             return report,payload['model'],attempt
         except ValueError as error:
             if attempt==2:raise
@@ -252,7 +264,7 @@ def generate_report(api,ip,context,bindings):
             guidance={'Report trigger condition':'trigger中的监控阈值须替换为完整yellow_condition/red_condition标记，不能只引用yellow/red数字。',
                 'Report incomplete score':'总分缺失必须标为待评估，不能把部分已评估指标的绿灯写成整体绿灯或总体低风险。',
                 'Report unavailable simulation':'本次没有可用模拟。scenarios/events仅引用D7/D3/D12并解释无法预测，不得用静态指标或参数推断未欠付、未触发。',
-                'Report unsupported inference':'不能从新增到期比证明循环购买存在或运行正常；不能把前10%贷款写成前十大额。按原始证据解释，不补交易机制。'}.get(str(error),'')
+                'Report unsupported inference':'没有实际法律履约记录，不能声称当前无实质违约。不能从新增到期比证明循环购买存在或运行正常；不能把前10%贷款写成前十大额。按原始证据解释，不补交易机制。'}.get(str(error),'')
             if 'S-base' not in refs:guidance+='本次无法模拟，必须把scenarios/events两节内所有数值token及静态指标判断删除，只解释无法判断及补数要求。'
             payload['messages'].extend([{'role':'assistant','content':answer},{'role':'user','content':
                 '上次报告未通过服务端校验：'+str(error)+'。'+guidance+'不合规原文片段：'+getattr(error,'detail','')+

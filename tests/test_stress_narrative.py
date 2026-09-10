@@ -80,6 +80,17 @@ class GroundedNarrativeTests(unittest.TestCase):
                 base.stress.generate_report(base.api,'qa',self.context,self.bindings)
         self.assertEqual(call.call_count,3)
 
+    def test_known_binding_citation_is_attached_without_another_model_call(self):
+        import json
+        report=base.mock_report(self.context)
+        report['sections'][0]['analysis']+='数据截至{{D11.as_of}}。'
+        report['sections'][0]['evidence_refs']=[ref for ref in report['sections'][0]['evidence_refs'] if ref!='D11']
+        with patch.object(base.stress,'model_call',return_value=json.dumps(report)) as call:
+            rendered,_,corrections=base.stress.generate_report(base.api,'qa',self.context,self.bindings)
+        self.assertIn('D11',rendered['sections'][0]['evidence_refs'])
+        self.assertEqual(corrections,0)
+        self.assertEqual(call.call_count,1)
+
     def test_trigger_operators_and_unavailable_simulation_remain_grounded(self):
         report=base.mock_report(self.context)
         report['actions'][0]['trigger']='若逾期率达到{{M1.yellow}}，则核对账龄明细。'
