@@ -20,6 +20,20 @@ JOB_TTL = 600
 GATE = threading.BoundedSemaphore(2)
 LOCK = threading.Lock()
 JOBS = {}
+OUTPUT_SCHEMA = {'type': 'object', 'properties': {
+    'complete': {'type': 'boolean'},
+    'thresholds': {'type': 'array', 'items': {'type': 'object', 'properties': {
+        'metric_id': {'type': 'string', 'enum': sorted(calc.IDS)},
+        'yellow': {'type': ['number', 'null']}, 'red': {'type': ['number', 'null']},
+        'page': {'type': 'integer', 'description': '从PDF第一页开始计数的物理页序号'},
+        'quote': {'type': 'string', 'description': '包含阈值数值、单位、方向与等级的识别片段'}},
+        'required': ['metric_id', 'yellow', 'red', 'page', 'quote'], 'additionalProperties': False}},
+    'notes': {'type': 'array', 'items': {'type': 'string'}}},
+    'required': ['complete', 'thresholds', 'notes'], 'additionalProperties': False}
+
+
+class PdfResultError(ValueError):
+    """Static diagnostic code only; never include document or provider text."""
 
 
 def validate_file(raw):
@@ -46,33 +60,33 @@ def quote_numbers(quote):
 
 def validate_result(parsed, name, raw, model):
     if not isinstance(parsed, dict) or set(parsed) != {'thresholds', 'notes', 'complete'}:
-        raise ValueError('PDF contract schema')
+        raise PdfResultError('pdf_contract_schema')
     if parsed['complete'] is not True:
         raise data.DataError('PDF存在无法清晰读取或未完成分析的页面，请上传清晰的相关条款节选后重试。')
     items = parsed['thresholds']
-    if not isinstance(items, list) or len(items) > 24: raise ValueError('PDF thresholds')
+    if not isinstance(items, list) or len(items) > 24: raise PdfResultError('pdf_thresholds')
     result, citations = {}, {}
     for item in items:
         if not isinstance(item, dict) or set(item) != {'metric_id', 'yellow', 'red', 'page', 'quote'}:
-            raise ValueError('PDF threshold schema')
+            raise PdfResultError('pdf_threshold_schema')
         mid, page, quote = item['metric_id'], item['page'], item['quote']
-        if not isinstance(mid, str) or mid not in calc.IDS or mid in result: raise ValueError('PDF metric')
-        if isinstance(page, bool) or not isinstance(page, int) or not 1 <= page <= 500: raise ValueError('PDF page')
-        if not isinstance(quote, str) or not 4 <= len(quote.strip()) <= 300: raise ValueError('PDF quote')
+        if not isinstance(mid, str) or mid not in calc.IDS or mid in result: raise PdfResultError('pdf_metric')
+        if isinstance(page, bool) or not isinstance(page, int) or not 1 <= page <= 500: raise PdfResultError('pdf_page')
+        if not isinstance(quote, str) or not 4 <= len(quote.strip()) <= 300: raise PdfResultError('pdf_quote')
         values = [item[level] for level in ('yellow', 'red') if item[level] is not None]
-        if not values: raise ValueError('PDF empty thresholds')
+        if not values: raise PdfResultError('pdf_empty_thresholds')
         # This catches unsupported numeric claims; it does not verify OCR against the image.
         numbers = quote_numbers(quote)
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
                or not any(math.isclose(v, n, rel_tol=1e-9, abs_tol=1e-9) for n in numbers) for v in values):
-            raise ValueError('PDF threshold absent from recognized quote')
+            raise PdfResultError('pdf_threshold_absent_from_quote')
         result[mid] = {'yellow': item['yellow'], 'red': item['red'], 'quote': quote.strip(),
                        'source': f'PDF合约提取，待人工确认：{name[:70]} · PDF第{page}页（AI识别）'}
         citations[mid] = {'page': page, 'kind': 'ai_recognized'}
     calc.thresholds(result, 1)
     notes = parsed['notes']
     if not isinstance(notes, list) or len(notes) > 12 or any(not isinstance(n, str) or len(n) > 500 for n in notes):
-        raise ValueError('PDF notes')
+        raise PdfResultError('pdf_notes')
     return {'thresholds': result, 'citations': citations, 'notes': notes, 'input_type': 'pdf',
             'requires_confirmation': True, 'contract_hash': hashlib.sha256(raw).hexdigest(), 'model': model,
             'message': '以下为AI识别的PDF片段和页码，可能存在识别偏差；请打开原PDF，逐项核对数值、单位、方向及预警等级后再应用。未提取项保留参考线，复杂合约事件须另行确认。'}
@@ -90,12 +104,16 @@ def extract(api, ip, name, raw, model, model_call, parse_json):
         '无法可靠区分等级、字迹模糊、指标含义不匹配、同一指标存在冲突或跨页条件无法在一个片段中完整呈现时，不输出该项，写入notes。'
         '宽限期、限定条件与复杂瀑布事件放入notes，不强行映射。扫描PDF需读取图像。'
         '如存在无法读取或未完成处理的页面，complete必须为false，不声称完成。清晰但没有可匹配阈值时，complete=true且thresholds为空，notes说明。'
-        '最多24项阈值、12条notes。不得输出PDF全文。')
+        '最多24项阈值、12条notes，每条notes控制在200字内。不得输出PDF全文。')
     payload = {'model': model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': [
         {'type': 'file', 'file': {'file_data': 'data:application/pdf;base64,' + base64.b64encode(raw).decode('ascii'), 'filename': 'contract.pdf'}},
         {'type': 'text', 'text': '请读取附件并按以下监控口径返回JSON：' + json.dumps(schema, ensure_ascii=False)}]}],
-        'response_format': {'type': 'json_object'}, 'enable_thinking': False, 'temperature': 0, 'stream': False, 'max_tokens': 5000}
-    return validate_result(parse_json(model_call(api, ip, payload, timeout=TIMEOUT)), name, raw, model)
+        'response_format': {'type': 'json_schema', 'json_schema': {'name': 'pdf_contract_thresholds', 'strict': True, 'schema': OUTPUT_SCHEMA}},
+        'enable_thinking': False, 'temperature': 0, 'stream': False, 'max_tokens': 16000}
+    answer = model_call(api, ip, payload, timeout=TIMEOUT)
+    try: parsed = parse_json(answer)
+    except json.JSONDecodeError: raise PdfResultError('pdf_json_invalid_or_truncated') from None
+    return validate_result(parsed, name, raw, model)
 
 
 def run_job(identity, api, ip, name, raw, model, model_call, parse_json):
@@ -114,7 +132,8 @@ def run_job(identity, api, ip, name, raw, model, model_call, parse_json):
         error.close()
     except Exception as error:
         # Never log PDF bytes, recognized clauses, provider responses, or credentials.
-        print(json.dumps({'event': 'pdf_contract_error', 'type': type(error).__name__}), flush=True)
+        print(json.dumps({'event': 'pdf_contract_error', 'type': type(error).__name__,
+                          'reason': str(error) if isinstance(error, PdfResultError) else 'invalid_model_response'}), flush=True)
         message = 'PDF读取超时，请缩小到相关条款页后重新上传。' if isinstance(error, (TimeoutError, urllib.error.URLError)) else 'PDF分析未通过校验，请确认文件清晰、未加密后重试，或改用DOCX/TXT。'
         update = {'status': 'failed', 'message': message}
     finally:

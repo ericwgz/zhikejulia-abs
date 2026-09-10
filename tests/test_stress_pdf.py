@@ -78,7 +78,11 @@ class PdfContractTests(unittest.TestCase):
         self.assertEqual(attachment['type'], 'file')
         self.assertEqual(attachment['file']['filename'], 'contract.pdf')
         self.assertEqual(attachment['file']['file_data'], 'data:application/pdf;base64,' + base64.b64encode(RAW).decode())
-        self.assertEqual(payload['response_format'], {'type': 'json_object'})
+        self.assertEqual(payload['response_format']['type'], 'json_schema')
+        self.assertTrue(payload['response_format']['json_schema']['strict'])
+        props = payload['response_format']['json_schema']['schema']['properties']['thresholds']['items']['properties']
+        self.assertEqual(props['yellow']['type'], ['number', 'null'])
+        self.assertEqual(set(props['metric_id']['enum']), base.calc.IDS)
         self.assertFalse(payload['enable_thinking']); self.assertFalse(payload['stream'])
         self.assertEqual(kwargs['timeout'], 300)
         self.assertNotIn('file_data', json.dumps(job))
@@ -149,6 +153,11 @@ class PdfContractTests(unittest.TestCase):
                 pdf.start(api, {'workspace_id': 'test'}, 'test', 'test.pdf', RAW, 'qwen3.8-max', stress.model_call, stress.safe_json)
         self.assertEqual(pdf.JOBS, {})
         self.assertTrue(pdf.GATE.acquire(blocking=False)); pdf.GATE.release()
+
+    def test_model_truncation_has_static_diagnostic_without_source_text(self):
+        def call(*args, **kwargs): return '{"thresholds": [{"quote": "private fragment'
+        with self.assertRaisesRegex(pdf.PdfResultError, '^pdf_json_invalid_or_truncated$'):
+            pdf.extract(api, 'test', 'test.pdf', RAW, 'qwen3.8-max', call, stress.safe_json)
 
     def test_provider_http_errors_are_not_reported_as_timeouts(self):
         for status, expected in ((400, '重新导出'), (401, '认证失败'), (403, '权限'), (429, '请求较多'), (503, '暂时不可用')):

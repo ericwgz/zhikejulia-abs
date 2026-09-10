@@ -29,6 +29,8 @@ PDF文件只用于本次模型读取，应用不持久化保存原文件；未�
 数据表仍只接受CSV/XLSX、700 KB上限，PDF不会替代24项指标所需的结构化输入。
 接口采用[阿里云原生PDF理解](https://help.aliyun.com/zh/model-studio/pdf-understanding)的
 Chat Completions文件消息；服务地域须支持该能力。生产运行仍仅依赖Python标准库。
+PDF提取使用严格JSON Schema约束字段及类型，再由程序校验引用数字、等级顺序和页码范围；
+不合格或被截断的结果不应用，诊断日志只记录固定错误类别，不记录PDF正文。
 
 ## 输入口径
 
