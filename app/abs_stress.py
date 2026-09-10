@@ -188,9 +188,9 @@ def validate_report(report,refs,bindings=None,section_refs=None):
             if not set(cited).intersection(section_refs[key]):raise ValueError('Report irrelevant evidence')
             if key=='summary' and 'D6' not in cited:raise ValueError('Report irrelevant evidence')
             if key=='summary' and bindings.get('D6.score',{}).get('value') is None:
-                for claim in re.finditer(r'(?:整体|总体|总览|综合).{0,12}(?:绿灯|低风险)',value):
-                    surrounding=value[max(0,claim.start()-8):claim.end()]
-                    if not re.search(r'不能|无法|不代表|不得|未形成|尚未',surrounding):raise ValueError('Report incomplete score')
+                for clause in re.split(r'[。；，！？\n]',value):
+                    for claim in re.finditer(r'(?:整体|总体|总览|综合).{0,18}(?:绿灯|低风险|风险(?:较)?低)',clause):
+                        if not re.search(r'不能|无法|不代表|不得|未形成|尚未|不应|不宜|不等于|不意味|不足以',clause[:claim.end()]):raise ValueError('Report incomplete score')
             if key=='scenarios' and 'S-base' in refs:
                 if 'S-base' not in cited or not any(ref.startswith('S-') and ref!='S-base' for ref in cited):raise ValueError('Report scenario comparison')
             if key in ('scenarios','events') and 'S-base' not in refs:
@@ -198,7 +198,8 @@ def validate_report(report,refs,bindings=None,section_refs=None):
                 for claim in re.finditer(r'(?:未|没有)(?:出现|产生|触发).{0,10}(?:欠付|缺口|违约|加速)|预测未.{0,8}越线',value):
                     prefix=re.split(r'[。；，]',value[:claim.start()])[-1][-16:]
                     if not re.search(r'不能|无法|不代表|不意味|不得|不等于',prefix):raise ValueError('Report unavailable simulation')
-            if key!='limitations' and any(v['ref'] in cited and v.get('kind') not in ('literal','missing') for v in bindings.values()) and not any(bindings[token].get('kind') not in ('literal','missing') for token in narrative.TOKEN.findall(value)):
+            qualitative_only = key=='limitations' or (key in ('scenarios','events') and 'S-base' not in refs)
+            if not qualitative_only and any(v['ref'] in cited and v.get('kind') not in ('literal','missing') for v in bindings.values()) and not any(bindings[token].get('kind') not in ('literal','missing') for token in narrative.TOKEN.findall(value)):
                 raise ValueError('Report missing quantitative evidence')
         sections.append({'id':key,'title':title,'analysis':analysis,'evidence_refs':cited})
     if not isinstance(report['actions'],list) or not 2<=len(report['actions'])<=6:raise ValueError('Report actions')

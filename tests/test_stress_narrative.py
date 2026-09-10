@@ -53,6 +53,19 @@ class GroundedNarrativeTests(unittest.TestCase):
             else:bad['actions'][1]['action']=bad['actions'][0]['action']
             with self.subTest(field=field),self.assertRaises(ValueError):self.validate(bad)
 
+    def test_scenario_count_matches_global_simulation_and_never_rewrites_wrong_count(self):
+        refs={'S-base','S-deterioration','S-prepayment','S-default','S-macro'}
+        for count in ('五种','5种','五个','5个'):
+            with self.subTest(valid=count):
+                self.assertFalse(base.stress.narrative.numeric_parts('本次模拟涵盖'+count+'情景。',refs)[1])
+        for count in ('四种','4种','四个','4个','十五种','55个'):
+            with self.subTest(invalid=count):
+                cleaned,violations=base.stress.narrative.numeric_parts('本次模拟涵盖'+count+'情景。',refs)
+                self.assertTrue(violations)
+                self.assertIn(count+'情景',cleaned)
+        self.assertTrue(base.stress.narrative.numeric_parts('本次包含五个情景。',{'S-base'})[1])
+        self.assertFalse(base.stress.narrative.numeric_parts('第一，核对输入。第二，检查模型假设。',refs)[1])
+
     def test_missing_score_and_absent_event_are_not_replaced_with_zero(self):
         context,bindings=base.stress.reporting.build_context(context_tests.QuantitativeReportContextTests().result([{'product_id':'p','date':'2026-08-31','balance':100}]))
         report=base.mock_report(context);refs={e['ref'] for e in context['evidence']}
@@ -67,6 +80,37 @@ class GroundedNarrativeTests(unittest.TestCase):
         self.assertNotIn('0分',rendered['sections'][0]['analysis'])
         report['sections'][0]['analysis']+='内部总分为0分。'
         with self.assertRaisesRegex(ValueError,'numeric claims'):base.stress.validate_report(report,refs,bindings,context['section_refs'])
+
+    def test_unavailable_scenarios_and_events_accept_explicit_nonnumeric_missing_data_explanation(self):
+        context,bindings=base.stress.reporting.build_context(context_tests.QuantitativeReportContextTests().result(
+            [{'product_id':'p','date':'2026-08-31','balance':100}]))
+        refs={e['ref'] for e in context['evidence']}
+        report=base.mock_report(context)
+        report['sections'][3].update(
+            analysis='本次缺少现金流与储备账户资料，无法形成可用的压力情景结果。需补齐汇总口径和账户流水后再运行，当前不比较各档证券的受压程度或最不利情景。',
+            evidence_refs=['D7','D3','D12'])
+        report['sections'][4].update(
+            analysis='由于关键输入尚未补齐，本次无法推演瀑布状态切换或到期欠付路径。应先核对合同和账户资料，待数据完备后重新模拟；不能将无法预测解释为实际交易安全。',
+            evidence_refs=['D7','D3','D12'])
+        # D3 has a numeric assessed-count binding, but a missing-data explanation
+        # must not be forced to insert that unrelated number to pass validation.
+        self.assertIn('D3.assessed',bindings)
+        rendered=base.stress.validate_report(report,refs,bindings,context['section_refs'])
+        self.assertEqual(rendered['sections'][3]['analysis'],report['sections'][3]['analysis'])
+        self.assertEqual(rendered['sections'][4]['analysis'],report['sections'][4]['analysis'])
+
+    def test_missing_score_negation_is_clause_scoped_not_a_short_character_window(self):
+        context,bindings=base.stress.reporting.build_context(context_tests.QuantitativeReportContextTests().result(
+            [{'product_id':'p','date':'2026-08-31','balance':100}]))
+        refs={e['ref'] for e in context['evidence']}
+        report=base.mock_report(context)
+        report['sections'][0]['analysis']+='无法依据已评估指标判定总体为低风险。'
+        rendered=base.stress.validate_report(report,refs,bindings,context['section_refs'])
+        self.assertIn('无法依据已评估指标判定总体为低风险。',rendered['sections'][0]['analysis'])
+        # The preceding sentence's negation must not excuse an affirmative claim.
+        report['sections'][0]['analysis']+='本次总体风险低，整体为绿灯。'
+        with self.assertRaisesRegex(ValueError,'incomplete score'):
+            base.stress.validate_report(report,refs,bindings,context['section_refs'])
 
     def test_one_bounded_format_correction_preserves_context(self):
         good=base.mock_report(self.context)
